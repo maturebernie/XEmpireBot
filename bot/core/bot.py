@@ -15,9 +15,18 @@ from bot.utils.settings import config
 from bot.utils.functions import calculate_bet, calculate_best_skill, improve_possible, number_short, calculate_tap_power
 from .headers import headers
 
+import ssl 
+
+import aiohttp
+import aiocfscrape
+import asyncio
+from aiohttp_proxy import ProxyConnector
+import logging
+import urllib.parse
+
 class CryptoBot:
 	def __init__(self, tg_client: Client):
-		self.session_name = tg_client.name
+		self.session_name = tg_client
 		self.tg_client = tg_client
 		self.bot_peer = None
 		self.bot_username = 'empirebot'
@@ -26,66 +35,68 @@ class CryptoBot:
 		self.taps_limit = False
 		self.taps_limit_date = ''
 		self.errors = 0
+		print("finished initializing cryptobot")
 
 	async def get_tg_web_data(self, proxy: str | None) -> dict:
-		if proxy:
-			proxy = Proxy.from_str(proxy)
-			proxy_dict = dict(
-				scheme=proxy.protocol,
-				hostname=proxy.host,
-				port=proxy.port,
-				username=proxy.login,
-				password=proxy.password
-			)
-		else:
-			proxy_dict = None
+		# if proxy:
+		# 	proxy = Proxy.from_str(proxy)
+		# 	proxy_dict = dict(
+		# 		scheme=proxy.protocol,
+		# 		hostname=proxy.host,
+		# 		port=proxy.port,
+		# 		username=proxy.login,
+		# 		password=proxy.password
+		# 	)
+		# else:
+		# 	proxy_dict = None
 
-		self.tg_client.proxy = proxy_dict
+		# self.tg_client.proxy = proxy_dict
 
 		try:
-			if not self.tg_client.is_connected:
-				try:
-					await self.tg_client.connect()
-					if self.user_id is None:
-						user = await self.tg_client.get_me()
-						self.user_id = user.id
-				except (Unauthorized, UserDeactivated, AuthKeyUnregistered) as error:
-					raise RuntimeError(str(error)) from error
+			# if not self.tg_client.is_connected:
+			# 	try:
+			# 		await self.tg_client.connect()
+			# 		if self.user_id is None:
+			# 			user = await self.tg_client.get_me()
+			# 			self.user_id = user.id
+			# 	except (Unauthorized, UserDeactivated, AuthKeyUnregistered) as error:
+			# 		raise RuntimeError(str(error)) from error
 			
-			dialogs = self.tg_client.get_dialogs()
-			async for dialog in dialogs:
-				if dialog.chat and dialog.chat.username and dialog.chat.username == self.bot_username:
-					break
+			# dialogs = self.tg_client.get_dialogs()
+			# async for dialog in dialogs:
+			# 	if dialog.chat and dialog.chat.username and dialog.chat.username == self.bot_username:
+			# 		break
 			
-			while self.bot_peer is None:
-				try:
-					self.bot_peer = await self.tg_client.resolve_peer(self.bot_username)
-				except FloodWait as error:
-					seconds = error.value
-					log.warning(f"{self.session_name} | Telegram required a wait of {seconds} seconds")
-					seconds += 60
-					log.info(f"{self.session_name} | Sleep {seconds} seconds")
-					await asyncio.sleep(seconds)
+			# while self.bot_peer is None:
+			# 	try:
+			# 		self.bot_peer = await self.tg_client.resolve_peer(self.bot_username)
+			# 	except FloodWait as error:
+			# 		seconds = error.value
+			# 		log.warning(f"{self.session_name} | Telegram required a wait of {seconds} seconds")
+			# 		seconds += 60
+			# 		log.info(f"{self.session_name} | Sleep {seconds} seconds")
+			# 		await asyncio.sleep(seconds)
 			
-			ref_code = config.REF_CODE
-			app_params = {
-				'peer': self.bot_peer,
-				'app': InputBotAppShortName(bot_id=self.bot_peer, short_name='game'),
-				'platform': 'android',
-				'write_allowed': True
-			}
-			if str(self.user_id) not in ref_code: app_params['start_param'] = ref_code
-			web_view = await self.tg_client.invoke(RequestAppWebView(**app_params))
+			# ref_code = config.REF_CODE
+			# app_params = {
+			# 	'peer': self.bot_peer,
+			# 	'app': InputBotAppShortName(bot_id=self.bot_peer, short_name='game'),
+			# 	'platform': 'android',
+			# 	'write_allowed': True
+			# }
+			# if str(self.user_id) not in ref_code: app_params['start_param'] = ref_code
+			# web_view = await self.tg_client.invoke(RequestAppWebView(**app_params))
 			
-			parsed_url = urlparse(web_view.url)
-			tg_web_data = unquote(parsed_url.fragment.split("tgWebAppData=", maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
+			# parsed_url = urlparse(web_view.url)
+			# tg_web_data = unquote(parsed_url.fragment.split("tgWebAppData=", maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
+			tg_web_data = self.tg_client
 			params = parse_qs(tg_web_data)
 			chat_type = params.get('chat_type', [''])[0]
 			chat_instance = params.get('chat_instance', [''])[0]
 			user_hash = params.get('hash', [''])[0]
 			self.api_key = user_hash
-			if self.tg_client.is_connected:
-				await self.tg_client.disconnect()
+			# if self.tg_client.is_connected:
+			# 	await self.tg_client.disconnect()
 			
 			login_data = {'data': {
 					'chatId': '',
@@ -95,7 +106,8 @@ class CryptoBot:
 					'platform': 'android'
 				}
 			}
-			if str(self.user_id) not in ref_code: login_data['data']['startParam'] = ref_code
+			# if str(self.user_id) not in ref_code: login_data['data']['startParam'] = ref_code
+			print(login_data)
 			return login_data
 
 		except RuntimeError as error:
@@ -143,6 +155,7 @@ class CryptoBot:
 			if full:
 				json_data = {'data': {}}
 				await self.set_sign_headers(data=json_data)
+				print(self.http_client.headers)
 				response = await self.http_client.post(full_url, json=json_data)
 				response.raise_for_status()
 				response_text = await response.text()
@@ -697,22 +710,53 @@ class CryptoBot:
 			log.success(f"{self.session_name} | You have reached a new level: {level}")
 		self.level = level
 	
-	async def check_proxy(self, proxy: Proxy) -> None:
+	# async def check_proxy(self, proxy: Proxy) -> None:
+	# 	try:
+	# 		response = await self.http_client.get(url='https://httpbin.org/ip', timeout=aiohttp.ClientTimeout(5))
+	# 		ip = (await response.json()).get('origin')
+	# 		log.info(f"{self.session_name} | Proxy IP: {ip}")
+	# 	except Exception as error:
+	# 		log.error(f"{self.session_name} | Proxy: {proxy} | Error: {error}")
+
+	async def check_proxy(self, http_client: aiohttp.ClientSession, proxy: Proxy) -> None:
 		try:
-			response = await self.http_client.get(url='https://httpbin.org/ip', timeout=aiohttp.ClientTimeout(5))
-			ip = (await response.json()).get('origin')
+			response = await http_client.get(url='https://api.ipify.org?format=json', timeout=aiohttp.ClientTimeout(5))
+			ip = (await response.json()).get('ip')
 			log.info(f"{self.session_name} | Proxy IP: {ip}")
 		except Exception as error:
 			log.error(f"{self.session_name} | Proxy: {proxy} | Error: {error}")
 
 	async def run(self, sess_data: dict) -> None:
+		print("starting to run bot")
 		proxy = sess_data['proxy'] if sess_data['proxy'] else None
-		proxy_conn = ProxyConnector().from_url(sess_data['proxy']) if proxy else None
+		# proxy_conn = ProxyConnector().from_url(sess_data['proxy']) if proxy else None
 		headers['User-Agent'] = sess_data['ua']
-		async with aiohttp.ClientSession(headers=headers, connector=proxy_conn) as http_client:
+		print(proxy)
+		print(sess_data['ua'])
+
+		CIPHERS = [
+			"ECDHE-ECDSA-AES128-GCM-SHA256", "ECDHE-RSA-AES128-GCM-SHA256",
+			"ECDHE-ECDSA-AES256-GCM-SHA384", "ECDHE-RSA-AES256-GCM-SHA384",
+			"ECDHE-ECDSA-CHACHA20-POLY1305", "ECDHE-RSA-CHACHA20-POLY1305",
+			"ECDHE-RSA-AES128-SHA", "ECDHE-RSA-AES256-SHA",
+			"AES128-GCM-SHA256", "AES256-GCM-SHA384", "AES128-SHA", "AES256-SHA", "DES-CBC3-SHA",
+			"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256",
+			"TLS_AES_128_CCM_SHA256", "TLS_AES_256_CCM_8_SHA256"
+		]
+		ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+		ssl_context.set_ciphers(':'.join(CIPHERS))
+		ssl_context.set_ecdh_curve("prime256v1")
+		ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
+		ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
+
+        # ssl_context = TLSv1_3_BYPASS.create_ssl_context()
+		conn = ProxyConnector().from_url(url=proxy, rdns=True, ssl=ssl_context)
+
+
+		async with aiocfscrape.CloudflareScraper(headers=headers, connector=conn) as http_client:
 			self.http_client = http_client
 			if proxy:
-				await self.check_proxy(proxy=proxy)
+				await self.check_proxy(http_client=http_client, proxy=proxy)
 			
 			day_start = time(9, 0)
 			day_end = time(23, 59)
@@ -729,6 +773,7 @@ class CryptoBot:
 					break
 				try:
 					if not self.authorized:
+						print("now authorizing")
 						login_data = await self.get_tg_web_data(proxy=proxy)
 						if await self.login(json_data=login_data):
 							log.success(f"{self.session_name} | Login successful")

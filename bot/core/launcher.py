@@ -38,14 +38,24 @@ async def register_sessions() -> None:
 	log.success(f"Session added successfully: {user_data.username or user_data.id} | "
                    f"{user_data.first_name or ''} {user_data.last_name or ''}")
 
-def get_proxies() -> list[Proxy]:
-	if config.USE_PROXY_FROM_FILE:
-		with open(file='proxies.txt', encoding='utf-8') as file:
-			proxies = sorted([Proxy.from_str(proxy=row.strip()).as_url for row in file if row.strip()])
-	else:
-		proxies = []
+def get_agents(file='bot/config/agents.txt'):
+	datas = [i for i in open(file).read().splitlines() if len(i) > 0]
+	if len(datas) <= 0:
+		print(
+			f"{merah}0 account detected from {file}, fill your data in {file} first !{reset}"
+		)
+		sys.exit()
 
-	return proxies
+	return datas
+
+def get_proxies() -> list[Proxy]:
+    if True:
+        with open(file='bot/config/proxies.txt', encoding='utf-8-sig') as file:
+            proxies = [Proxy.from_str(proxy=row.strip()).as_url for row in file]
+    else:
+        proxies = []
+
+    return proxies
 
 def get_session_data(sessions: list) -> dict:
 	data_file = 'session_data.json'
@@ -99,13 +109,31 @@ async def run_bot_with_delay(tg_client: Client, data: dict, delay: int) -> None:
 async def run_clients(tg_clients: list[Client], session_data: dict) -> None:
 	tasks = []
 	delay = 0
+	proxies = get_proxies()
+	proxies_cycle = cycle(proxies)  # Correct indentation
+	agents = get_agents()
+	agents_cycle = cycle(agents)    # Correct indentation
+
 	for index, tg_client in enumerate(tg_clients):
 		if index > 0:
 			delay = random.randint(*config.SLEEP_BETWEEN_START)
 
-		task = asyncio.create_task(run_bot_with_delay(tg_client=tg_client, data=session_data[tg_client.name], delay=delay))
+
+		task = asyncio.create_task(run_bot_with_delay(tg_client=tg_client, data={"proxy": next(proxies_cycle), "ua": next(agents_cycle)}, delay=delay))
 		tasks.append(task)
 	await asyncio.gather(*tasks)
+
+
+def load_data(file):
+	datas = [i for i in open(file).read().splitlines() if len(i) > 0]
+	if len(datas) <= 0:
+		print(
+			f"{merah}0 account detected from {file}, fill your data in {file} first !{reset}"
+		)
+		sys.exit()
+
+	return datas
+
 
 async def start() -> None:
 	if not config:
@@ -113,9 +141,11 @@ async def start() -> None:
 		return
 	parser = ArgumentParser()
 	parser.add_argument('-a', '--action', type=int, choices=[1, 2], help='Action to perform  (1 or 2)')
-	log.info(f"Detected {len(get_session_names())} sessions | {len(get_proxies())} proxies")
+	# log.info(f"Detected {len(get_session_names())} sessions | {len(get_proxies())} proxies")
 	action = parser.parse_args().action
+	action = 2
 
+	
 	if not action:
 		print(start_text)
 		while True:
@@ -128,5 +158,9 @@ async def start() -> None:
 	if action == 1:
 		await register_sessions()
 	elif action == 2:
-		tg_clients, session_data = await get_tg_clients()
-		await run_clients(tg_clients=tg_clients, session_data=session_data)
+		# tg_clients, session_data = await get_tg_clients()
+		tg_clients = load_data('bot/config/data.txt')
+		log.info(f"Detected {len(tg_clients)} sessions | {len(get_proxies())} proxies")
+		proxies = get_proxies()
+		await run_clients(tg_clients=tg_clients, session_data=tg_clients)
+

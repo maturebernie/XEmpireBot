@@ -13,8 +13,8 @@ logo = """
 class Settings(BaseSettings):
 	model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
 
-	API_ID: int
-	API_HASH: str
+	API_ID: int = 1
+	API_HASH: str ='1'
 	
 	TAPS_ENABLED: bool = True
 	TAPS_PER_SECOND: list[int] = [20, 30] # tested with 4 fingers
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 	PROTECTED_BALANCE: int = 0
 	DAY_MAIN_DELAY: int = 3600
 	NIGHT_MAIN_DELAY: int = 10800
-	REF_CODE: str = 'hero5726822287'
+	REF_CODE: str = '1'
 
 	SLEEP_BETWEEN_START: list[int] = [20, 360]
 	ERRORS_BEFORE_STOP: int = 3
